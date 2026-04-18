@@ -9,8 +9,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/proyecto-node-backend
-  IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/proyecto-node-frontend
 
 jobs:
   test:
@@ -18,6 +16,7 @@ jobs:
     strategy:
       matrix:
         node-version: [20.x]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -41,9 +40,11 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+
   jest:
     runs-on: ubuntu-latest
     needs: test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -59,7 +60,7 @@ jobs:
         working-directory: backend
         run: npm ci
 
-      - name: Run backend tests with coverage
+      - name: Run backend tests
         working-directory: backend
         run: npm run test:coverage
 
@@ -67,11 +68,11 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Run frontend tests with coverage
+      - name: Run frontend tests
         working-directory: frontend
         run: CI=true npm test -- --coverage --runInBand --watchAll=false
 
-      - name: Upload coverage artifacts
+      - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
           name: coverage-reports
@@ -79,16 +80,18 @@ jobs:
             backend/coverage
             frontend/coverage
 
+
   sonarqube:
     name: SonarQube Scan
     runs-on: ubuntu-latest
     needs: [test, jest]
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Download coverage artifacts
+      - name: Download coverage
         uses: actions/download-artifact@v4
         with:
           name: coverage-reports
@@ -99,9 +102,11 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+
   k6-load-test:
     runs-on: ubuntu-latest
     needs: test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -119,7 +124,7 @@ jobs:
         working-directory: backend
         run: node server.js > server.log 2>&1 &
 
-      - name: Wait for backend
+      - name: Wait backend
         run: |
           for i in {1..30}; do
             if curl -sSf "http://localhost:5000/health" >/dev/null; then
@@ -128,29 +133,32 @@ jobs:
             fi
             sleep 2
           done
-          echo "Backend did not start in time"
+          echo "Backend failed"
           cat backend/server.log || true
           exit 1
 
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
 
-      - name: Run k6 load test
+      - name: Run k6 test
         run: BASE_URL=http://localhost:5000 k6 run tests/k6/login-load.js
 
-      - name: Upload k6 results
+      - name: Upload k6 logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: k6-results
           path: backend/server.log
 
+
   build-and-push:
     runs-on: ubuntu-latest
     needs: [sonarqube, k6-load-test]
+
     permissions:
       contents: read
       packages: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -160,86 +168,84 @@ jobs:
           echo "IMAGE_BACKEND=ghcr.io/$OWNER/proyecto-node-backend" >> "$GITHUB_ENV"
           echo "IMAGE_FRONTEND=ghcr.io/$OWNER/proyecto-node-frontend" >> "$GITHUB_ENV"
 
-      - name: Log in to GHCR
+      - name: Login GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push backend image
+      - name: Build backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: |
             ${{ env.IMAGE_BACKEND }}:main
-            ${{ env.IMAGE_BACKEND }}:canary
 
-      - name: Build and push frontend image
+      - name: Build frontend
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
           tags: |
             ${{ env.IMAGE_FRONTEND }}:main
-            ${{ env.IMAGE_FRONTEND }}:canary
+
 
   deploy:
     runs-on: ubuntu-latest
     needs: build-and-push
-    permissions:
-      contents: read
-      packages: read
     if: github.ref == 'refs/heads/main'
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure SSH Agent
+      - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
 
-      - name: Add known hosts and SSH config
+      - name: Add known hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts
-          cat >> ~/.ssh/config << EOF
-          Host docker-private
-            HostName ${{ secrets.DOCKER_PRIVATE_HOST }}
-            User ${{ secrets.DOCKER_USER }}
-            StrictHostKeyChecking no
-            ProxyJump ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}
+          ssh-keyscan -H ${{ secrets.DOCKER_PRIVATE_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.NGINX_PRIVATE_HOST }} >> ~/.ssh/known_hosts
 
-          Host nginx-private
-            HostName ${{ secrets.NGINX_PRIVATE_HOST }}
-            User ${{ secrets.NGINX_USER }}
-            StrictHostKeyChecking no
-            ProxyJump ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}
-          EOF
-          chmod 600 ~/.ssh/config
-
-      - name: Copy files to docker server
+      # =========================
+      # COPY VIA BASTION
+      # =========================
+      - name: Copy to docker server
         run: |
-          ssh docker-private "mkdir -p '${{ secrets.DOCKER_PROJECT_PATH }}'"
           rsync -az --delete \
+            -e "ssh -o StrictHostKeyChecking=no -J ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}" \
             --exclude ".git" \
             --exclude "backend/node_modules" \
             --exclude "frontend/node_modules" \
-            ./ docker-private:${{ secrets.DOCKER_PROJECT_PATH }}
+            ./ \
+            ${{ secrets.DOCKER_USER }}@${{ secrets.DOCKER_PRIVATE_HOST }}:${{ secrets.DOCKER_PROJECT_PATH }}
 
-      - name: Deploy application stack
+      # =========================
+      # DEPLOY DOCKER STACK
+      # =========================
+      - name: Deploy stack
         run: |
-          ssh docker-private "
-            cd '${{ secrets.DOCKER_PROJECT_PATH }}' &&
-            docker compose -f docker-compose.gcp.yml up -d --build
-          "
+          ssh -o StrictHostKeyChecking=no \
+            -J ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} \
+            ${{ secrets.DOCKER_USER }}@${{ secrets.DOCKER_PRIVATE_HOST }} \
+            "cd '${{ secrets.DOCKER_PROJECT_PATH }}' && docker compose -f docker-compose.gcp.yml up -d --build"
 
-      - name: Publish nginx config
+      # =========================
+      # DEPLOY NGINX
+      # =========================
+      - name: Deploy nginx config
         run: |
-          scp infra/nginx/gcp-servidor-nginx.conf nginx-private:/tmp/proyecto-node.conf
-          ssh nginx-private "
-            sudo mv /tmp/proyecto-node.conf /etc/nginx/conf.d/proyecto-node.conf &&
-            sudo nginx -t &&
-            sudo systemctl reload nginx
-          "
+          scp -o StrictHostKeyChecking=no \
+            -o ProxyJump=${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} \
+            infra/nginx/gcp-servidor-nginx.conf \
+            ${{ secrets.NGINX_USER }}@${{ secrets.NGINX_PRIVATE_HOST }}:/tmp/proyecto-node.conf
+
+          ssh -o StrictHostKeyChecking=no \
+            -J ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} \
+            ${{ secrets.NGINX_USER }}@${{ secrets.NGINX_PRIVATE_HOST }} \
+            "sudo mv /tmp/proyecto-node.conf /etc/nginx/conf.d/proyecto-node.conf && sudo nginx -t && sudo systemctl reload nginx"
