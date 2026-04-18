@@ -238,6 +238,12 @@ jobs:
       # =========================
       # DEPLOY NGINX
       # =========================
+      - name: Debug hosts
+        run: |
+          echo "BASTION=${{ secrets.BASTION_HOST }}"
+          echo "DOCKER=${{ secrets.DOCKER_PRIVATE_HOST }}"
+          echo "NGINX=${{ secrets.NGINX_PRIVATE_HOST }}"
+          
       - name: Deploy nginx config
         run: |
           scp -o StrictHostKeyChecking=no \
