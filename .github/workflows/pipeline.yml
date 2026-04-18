@@ -94,7 +94,6 @@ jobs:
     needs:
       - jest
       - k6-load-test
-    if: ${{ secrets.SONAR_TOKEN != '' && secrets.SONAR_HOST_URL != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -106,7 +105,17 @@ jobs:
         with:
           name: coverage-reports
 
+      - name: Check SonarQube secrets
+        id: sonar-secrets
+        run: |
+          if [ -n "${{ secrets.SONAR_TOKEN }}" ] && [ -n "${{ secrets.SONAR_HOST_URL }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: SonarQube Scan
+        if: steps.sonar-secrets.outputs.enabled == 'true'
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
