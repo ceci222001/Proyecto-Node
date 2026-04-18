@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TextField, Button, Container, Typography, Box, Paper, Grid, Link } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -20,7 +20,7 @@ const Login = () => {
     }
 
     try {
-      const response = await axios.post('/login', { username, password });
+      const response = await api.post('/login', { username, password });
       localStorage.setItem('username', response.data.username);
       setError({ username: false, password: false, message: '' });
       navigate('/account-details');

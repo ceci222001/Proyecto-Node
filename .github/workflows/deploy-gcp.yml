@@ -1,0 +1,59 @@
+name: Deploy GCP
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+
+      - name: Trust bastion host
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy repository to bastion
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude "backend/node_modules" \
+            --exclude "frontend/node_modules" \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}:${{ secrets.BASTION_PROJECT_PATH }}
+
+      - name: Deploy through bastion
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} "
+            set -eu
+            cd '${{ secrets.BASTION_PROJECT_PATH }}'
+            ssh -o StrictHostKeyChecking=no ${{ secrets.DOCKER_USER }}@${{ secrets.DOCKER_PRIVATE_HOST }} '
+              mkdir -p ${{ secrets.DOCKER_PROJECT_PATH }}
+            '
+            rsync -az --delete \
+              --exclude .git \
+              --exclude backend/node_modules \
+              --exclude frontend/node_modules \
+              ./ ${{ secrets.DOCKER_USER }}@${{ secrets.DOCKER_PRIVATE_HOST }}:${{ secrets.DOCKER_PROJECT_PATH }}
+            ssh -o StrictHostKeyChecking=no ${{ secrets.DOCKER_USER }}@${{ secrets.DOCKER_PRIVATE_HOST }} '
+              cd ${{ secrets.DOCKER_PROJECT_PATH }} &&
+              docker compose -f docker-compose.gcp.yml up -d --build
+            '
+            scp -o StrictHostKeyChecking=no infra/nginx/gcp-servidor-nginx.conf ${{ secrets.NGINX_USER }}@${{ secrets.NGINX_PRIVATE_HOST }}:/tmp/proyecto-node.conf
+            ssh -o StrictHostKeyChecking=no ${{ secrets.NGINX_USER }}@${{ secrets.NGINX_PRIVATE_HOST }} '
+              sudo mv /tmp/proyecto-node.conf /etc/nginx/conf.d/proyecto-node.conf &&
+              sudo nginx -t &&
+              sudo systemctl reload nginx
+            '
+          "

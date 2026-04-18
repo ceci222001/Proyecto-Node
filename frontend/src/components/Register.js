@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TextField, Button, Container, Typography, Box, Paper, Link } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 
 const Register = () => {
     const [username, setUsername] = useState('');
@@ -18,7 +18,7 @@ const Register = () => {
         }
 
         try {
-            const response = await axios.post('/register', { username, password });
+            const response = await api.post('/register', { username, password });
             setMessage('Registro exitoso.');
             setMessageType('primary');
             localStorage.setItem('username', response.data.username);

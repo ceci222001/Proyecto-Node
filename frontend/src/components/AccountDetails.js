@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { Card, CardContent, Typography, Grid, Container, Button, Box } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import api from '../api';
 
 const AccountDetails  = () => {
   const [accountDetails, setAccountDetails] = useState(null);
@@ -22,7 +22,7 @@ const AccountDetails  = () => {
 
     const fetchAccountDetails = async () => {
       try {
-        const response = await axios.get('/bank/bank-details', {
+        const response = await api.get('/bank/bank-details', {
           params: { username },
         });
         setAccountDetails(response.data.accountDetails);
