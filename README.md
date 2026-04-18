@@ -83,18 +83,16 @@ docker compose -f docker-compose.devops.yml up -d --build
 
 ## Pipeline
 
-Se dejaron dos workflows de GitHub Actions:
+Se dejo un workflow principal de GitHub Actions:
 
-- `.github/workflows/ci.yml`
-  - instala dependencias
-  - ejecuta tests backend y frontend
-  - genera coverage
-  - ejecuta analisis en SonarQube si defines `SONAR_TOKEN` y `SONAR_HOST_URL`
-- `.github/workflows/deploy-gcp.yml`
-  - despliega por SSH via `bastion-host`
-  - copia el repo a `servidor-docker-privado`
-  - levanta `docker-compose.gcp.yml`
-  - publica la config de Nginx en `servidor-nginx`
+- `.github/workflows/pipeline.yml`
+  - `jest`
+  - `k6-load-test`
+  - `SonarQube-Scan`
+  - `build-and-push`
+  - `deploy`
+
+Ese formato produce un grafo de jobs encadenados en GitHub Actions, similar al que esperas visualizar.
 
 Secrets esperados en GitHub:
 

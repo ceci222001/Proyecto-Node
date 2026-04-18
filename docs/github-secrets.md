@@ -22,7 +22,7 @@
   - `g2023171020`
 - `DOCKER_PROJECT_PATH`
   - ruta final del proyecto en esa VM
-  - ejemplo: `/opt/proyecto-node`
+  - ejemplo recomendado: `/home/g2023171020/proyecto-node`
 
 ### Servidor Nginx
 
@@ -49,7 +49,7 @@ BASTION_USER=g2023171020
 BASTION_PROJECT_PATH=/home/g2023171020/proyecto-node
 DOCKER_PRIVATE_HOST=10.0.2.3
 DOCKER_USER=g2023171020
-DOCKER_PROJECT_PATH=/opt/proyecto-node
+DOCKER_PROJECT_PATH=/home/g2023171020/proyecto-node
 NGINX_PRIVATE_HOST=10.0.1.3
 NGINX_USER=g2023171020
 ```

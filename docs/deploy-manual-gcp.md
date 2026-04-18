@@ -29,14 +29,14 @@ rsync -az --delete \
   --exclude ".git" \
   --exclude "backend/node_modules" \
   --exclude "frontend/node_modules" \
-  ~/proyecto-node/ g2023171020@10.0.2.3:/opt/proyecto-node
+  ~/proyecto-node/ g2023171020@10.0.2.3:/home/g2023171020/proyecto-node
 ```
 
 ## Paso 4. Levantar contenedores
 
 ```bash
 ssh g2023171020@10.0.2.3
-cd /opt/proyecto-node
+cd /home/g2023171020/proyecto-node
 docker compose -f docker-compose.gcp.yml up -d --build
 docker ps
 ```

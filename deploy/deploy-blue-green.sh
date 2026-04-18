@@ -2,7 +2,7 @@
 set -eu
 
 SLOT="${1:-blue}"
-PROJECT_PATH="${PROJECT_PATH:-/opt/proyecto-node}"
+PROJECT_PATH="${PROJECT_PATH:-/home/g2023171020/proyecto-node}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.gcp.yml}"
 ACTIVE_FILE="${ACTIVE_FILE:-$PROJECT_PATH/deploy/.active-slot}"
 
